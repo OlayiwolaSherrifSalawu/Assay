@@ -220,6 +220,34 @@ cost is that the hash cannot distinguish a fresh confirmation from a stale one
 — which is precisely why `attested_at` is stored separately and `is_safe` takes
 `max_age_secs` against it.
 
+**`undetermined` is deliberately excluded, decided in
+[#43](https://github.com/use-assay/Assay/issues/43).** The reasoning:
+
+- An undetermined report can never be attested — `attest.FromReport` refuses it
+  with `ErrUndetermined` — so the flag is constant (`false`) across every
+  report that has a hash at all. A field that never varies commits nothing; it
+  would add a line that carries no information in any preimage a verifier will
+  ever compare.
+- The exclusion is safe only because the refusal exists, so the guarantee rests
+  on `FromReport` refusing, not on the encoding. `TestUndeterminedReportIsRefused`
+  and `TestCapabilityClearWithReputationDownIsNotAttestable` (both in
+  `internal/attest/attest_test.go`) pin that refusal; if it is ever weakened,
+  the encoding decision must be revisited, because a hash over attestable
+  reports only is sound exactly as long as undetermined reports stay
+  unattestable.
+- Degraded scans are already visible in the hash through a stronger channel:
+  an unreachable source emits a `not retrievable: …` evidence claim, which is
+  hashed like any other. Two scans of the same asset, one with a source outage
+  and one without, already produce different hashes and different evidence
+  sets — there is nothing the flag would add that the evidence lines do not
+  already carry. `docs/attestation-run.md` records the corresponding live
+  observation: an undetermined KALE report would have hashed differently, and
+  the attestation was refused.
+- The corollary is a verifier rule, not just an implementation note: **never
+  compare the hash of a report carrying `undetermined: true`.** Such a report
+  has no evidence_hash — `FromReport` produces none — and an independent
+  reimplementer must refuse it the same way.
+
 The version line is inside the hash, so a future encoding change cannot produce
 bytes a verifier would silently compare against v1.
 
