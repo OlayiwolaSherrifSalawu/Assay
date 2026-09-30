@@ -155,6 +155,13 @@ function render(rep) {
     ? `<p class="note">Escalated from <strong>${esc_(rep.base_severity)}</strong> by curated reputation evidence.</p>`
     : '';
 
+  const staleBanner = (rep.stale || rep.state === 'stale')
+    ? `<div class="err" style="margin: 0 0 1rem 0; border-color: var(--medium); color: var(--medium);">
+        <strong>Stale verdict.</strong> ${esc_(rep.stale_reason || 'This observation is older than the policy window.')}
+        <p class="note">A stale verdict was complete when made, but cannot be relied on as a current answer.</p>
+       </div>`
+    : '';
+
   const findings = rep.findings.map(f => `
     <div class="finding sev-${esc_(f.severity)}">
       <div class="head">
@@ -171,6 +178,7 @@ function render(rep) {
     </div>`).join('');
 
   out.innerHTML = `
+    ${staleBanner}
     <div class="axes">
       <div class="card">
         <h2>Severity — issuer capability</h2>

@@ -178,5 +178,23 @@ func Corpus() []Label {
 				},
 			},
 		},
+		{
+			Dir: "velo-no-home-domain",
+			Why: "an issuer account that carries no home_domain at all: the domain " +
+				"claim is absent rather than wrong, so accountability must be unknown " +
+				"not unverified, and severity must stay clear (#3)",
+			Base:           mechanics.Clear,
+			Severity:       mechanics.Clear,
+			Accountability: mechanics.AccountabilityUnknown,
+			Checks: map[string]CheckLabel{
+				"capability": {Severity: mechanics.Clear},
+				"mutability": {Severity: mechanics.Clear},
+				// No domain was ever advertised, so the finding is unknown, not
+				// a failed verification — and still carries the unverified bit,
+				// because no identity was published to verify against.
+				"sep1-domain": {Severity: mechanics.Clear, Mechanics: mechanics.MechDomainUnverified},
+				"reputation":  {Severity: mechanics.Clear, Escalation: true},
+			},
+		},
 	}
 }
