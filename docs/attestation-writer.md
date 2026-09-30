@@ -53,8 +53,9 @@ the pipeline; it redesigns the contract.
 
 The key lives in the `assay-attester` stellar CLI identity
 ([deployment.md](deployment.md) records its address). Key custody and rotation
-procedure are operational concerns tracked as
-[#120](https://github.com/use-assay/Assay/issues/120); this design only
+procedure are operational concerns documented in
+[attester-key.md](attester-key.md) and tracked as
+[#150](https://github.com/use-assay/Assay/issues/150); this design only
 requires that the pipeline never accepts a seed file path from a report or a
 scan — the key is configuration, and the pipeline fails to start without it
 rather than falling back to an unsigned simulation that *looks* like success.
@@ -233,10 +234,14 @@ compromised it.
 - Attest **any severity for any asset**, including `clear` for a known scam
   and `high` for an asset it does not like. Nothing on-chain prevents this;
   the contract cannot check an `evidence_hash`, it only stores it.
-- **Overwrite** an existing attestation — `attest` has no revocation and no
-  history ([#86](https://github.com/use-assay/Assay/issues/86),
-  [#92](https://github.com/use-assay/Assay/issues/92)), so a bad write can
-  only be corrected by a newer write, and the overwritten values are gone.
+- **Overwrite** an existing attestation. `attest` keeps no history
+  ([#92](https://github.com/use-assay/Assay/issues/92)), so the overwritten
+  values are gone. `revoke`
+  ([#86](https://github.com/use-assay/Assay/issues/86)) lets an honest admin
+  withdraw a bad write rather than overwrite it, but the same key can also
+  revoke a *correct* attestation. That is a denial of service, and it fails
+  closed. `revoke` is in the contract source but not yet on the live testnet
+  deployment ([deployment.md](deployment.md#migrating-to-a-registry-with-revoke)).
 - Attest assets **never scanned**, with an `evidence_hash` of all zeroes.
 - Refuse to write, or stop writing — the fail-open-by-neglect attack. It
   degrades the registry to staleness, which `is_safe`'s `max_age_secs`
@@ -258,9 +263,13 @@ compromised it.
   ([#40](https://github.com/use-assay/Assay/issues/40)) and check-set binding
   ([#42](https://github.com/use-assay/Assay/issues/42)) narrow this; nothing
   eliminates it except threshold attestation.
-- *It does not bind the network* ([#41](https://github.com/use-assay/Assay/issues/41))
-  — a testnet scan and a pubnet scan of same-code-different-network assets are
-  indistinguishable in the preimage until the SAC-address binding above.
+- *It does not bind the network* — closed. The preimage binds the network
+  passphrase under `assay-evidence-v3`
+  ([#41](https://github.com/use-assay/Assay/issues/41)), so a testnet scan and
+  a pubnet scan of the same code+issuer no longer hash identically, and the
+  scanner refuses to run when its network cannot be determined before any
+  fetch. See [contract-interface.md](contract-interface.md), "The preimage
+  binds the network".
 
 **Consequence for the deployment claim this design is allowed to make:** the
 testnet pipeline demonstrates and exercises the machinery. It does not make
@@ -296,7 +305,8 @@ asks for maintainer sign-off on exactly that scope boundary.
   TTL extension ([#87](https://github.com/use-assay/Assay/issues/87)),
   multi-attestor ([#88](https://github.com/use-assay/Assay/issues/88)),
   admin rotation ([#89](https://github.com/use-assay/Assay/issues/89)),
-  key custody ([#120](https://github.com/use-assay/Assay/issues/120)),
+  key custody ([#150](https://github.com/use-assay/Assay/issues/150), see
+  [attester-key.md](attester-key.md)),
   the re-attestation runbook
   ([#115](https://github.com/use-assay/Assay/issues/115)).
 - Whether `undetermined` belongs in the preimage

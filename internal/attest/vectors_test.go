@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/use-assay/assay/internal/attest"
+	"github.com/use-assay/assay/internal/horizon"
 	"github.com/use-assay/assay/internal/mechanics"
 )
 
@@ -94,6 +95,36 @@ var vectorReports = map[string]func() *mechanics.Report{
 				ev("stellar.expert/blocked-domains",
 					"https://api.stellar.expert/explorer/directory/blocked-domains/velo.org",
 					`domain "velo.org" blocked=false`),
+			}
+		})
+	},
+	// network-bound-pubnet and network-bound-testnet are the v3 pair: two
+	// reports byte-identical except for the network line. Every earlier field,
+	// the check set, and the evidence are the same, so the two digests differ
+	// only through the ledger the facts were read from — which is exactly what
+	// #41 requires an attestation to be able to prove. The evidence URL cites
+	// the pubnet Horizon because the AQUA record these claims mirror was
+	// captured there; the testnet vector deliberately keeps it, since a
+	// verifiable URL is not itself a network claim and the hash must move on
+	// the network line alone.
+	"network-bound-pubnet": func() *mechanics.Report {
+		r := report(func(r *mechanics.Report) {
+			r.Mechanics = 0
+			r.CheckSet = []string{"capability", "mutability", "reputation", "sep1-domain"}
+			r.Network = horizon.PublicNet
+			r.Evidence = []mechanics.Evidence{
+				ev("horizon", vecHorizonURL, vecNoFlags),
+			}
+		})
+		return r
+	},
+	"network-bound-testnet": func() *mechanics.Report {
+		return report(func(r *mechanics.Report) {
+			r.Mechanics = 0
+			r.CheckSet = []string{"capability", "mutability", "reputation", "sep1-domain"}
+			r.Network = horizon.TestNet
+			r.Evidence = []mechanics.Evidence{
+				ev("horizon", vecHorizonURL, vecNoFlags),
 			}
 		})
 	},

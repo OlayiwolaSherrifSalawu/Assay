@@ -44,7 +44,38 @@ func (c DomainCheck) Run(_ context.Context, s *Subject) (Finding, error) {
 	if domain == "" {
 		f.Mechanics = MechDomainUnverified
 		f.Reasoning = "The issuer account advertises no home_domain, so there is no " +
-			"published identity to verify against. Nobody has publicly claimed this asset."
+			"published identity to verify against. Nobody has publicly claimed this " +
+			"asset. That is not a failed verification — there was no claim to test — " +
+			"which is why accountability is unknown rather than unverified."
+		return f, nil
+	}
+
+	// The advertised domain and the curated directory disagree about who
+	// claims this asset. Reported before toml reciprocity: whichever way the
+	// toml answers, the two sources cannot both be right, and a holder needs
+	// both claims attributed to their source rather than one silently winning.
+	if s.Directory != nil && s.Directory.Domain != "" && s.Directory.Domain != domain {
+		f.Mechanics = MechDomainUnverified
+		acc = AccountabilityUnverified
+		f.Accountability = &acc
+		f.Reasoning = fmt.Sprintf(
+			"The issuer advertises home_domain %q, but the curated directory lists the "+
+				"same issuer under %q. The two sources disagree about who claims this "+
+				"asset, so accountability is unverified: it cannot be determined which "+
+				"domain, if either, published a reciprocal claim.",
+			domain, s.Directory.Domain)
+		f.Evidence = append(f.Evidence, Evidence{
+			Source:      "horizon",
+			URL:         horizonAccountURL(s.Asset.Issuer),
+			Claim:       fmt.Sprintf("home_domain %q", domain),
+			RetrievedAt: s.IssuerFetchedAt,
+		})
+		f.Evidence = append(f.Evidence, Evidence{
+			Source:      "stellar.expert/directory",
+			URL:         s.DirectoryURL,
+			Claim:       fmt.Sprintf("listed under domain %q", s.Directory.Domain),
+			RetrievedAt: s.DirectoryFetchedAt,
+		})
 		return f, nil
 	}
 
@@ -72,18 +103,22 @@ func (c DomainCheck) Run(_ context.Context, s *Subject) (Finding, error) {
 		acc = AccountabilityUnverified
 		f.Mechanics = MechDomainUnverified
 
-		// SEP-0001 lets a currency entry delegate to its own TOML file, in
-		// which case the entry carries no code or issuer to match. Assay does
-		// not follow those links yet, so it must not claim the domain failed to
-		// name this asset when it may have done so in a document Assay never
-		// read. Overstating a negative is the same class of error as
-		// overstating a positive.
-		if linked := s.Toml.LinkedCurrencies(); linked > 0 {
+		// SEP-0001 lets a currency entry delegate to its own TOML file, and
+		// does not require the link to be the entry's only field: an entry may
+		// carry a code and issuer next to the link. Assay does not follow those
+		// links yet, so it must not claim the domain failed to name this asset
+		// when it may have done so in a document Assay never read. An entry
+		// that already matches inline is not an unresolved link — it is the
+		// claim itself — so only the entries that do not match are counted.
+		// Overstating a negative is the same class of error as overstating a
+		// positive.
+		if linked := s.Toml.LinkedCurrencies(s.Asset.Code, s.Asset.Issuer); linked > 0 {
 			f.Reasoning = fmt.Sprintf(
 				"The issuer advertises home_domain %q and that domain publishes a "+
 					"stellar.toml, but this asset (%s) is not declared inline in its "+
 					"CURRENCIES. The toml delegates %d currency entries to separate "+
-					"per-currency TOML files, which Assay does not follow yet, so this "+
+					"per-currency TOML files, by a toml link, whether or not the entry "+
+					"also carries a code. Assay does not follow those links yet, so this "+
 					"asset may be claimed in one of them. Treated as unverified "+
 					"because it is unconfirmed, not because it was refuted.",
 				domain, s.Asset, linked)

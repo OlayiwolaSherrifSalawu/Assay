@@ -9,10 +9,11 @@ they already hold the asset — and, more urgently, the question a prospective
 holder has about an issuer that seemed clear last week.
 
 This document defines how a change is represented. It is a design deliverable:
-the representation lives in [`internal/temporal`](../internal/temporal), the
-comparison functions are implemented there, and nothing here builds a detection
-pipeline, a store, or an API surface. Those are separate issues, named under
-[What this does not do](#what-this-does-not-do).
+the representation lives in [`internal/temporal`](../internal/temporal), and the
+comparison functions are implemented there. The store and the HTTP endpoint that
+feed them were built separately and are specified in [history.md](history.md);
+this document still builds no detection pipeline of its own, and the boundaries
+it sets are under [What this does not do](#what-this-does-not-do).
 
 ## What a transition is
 
@@ -224,10 +225,11 @@ better shape:
    `severity`) records what was read at scan time and cannot be recomputed
    without re-reading a curator.
 
-The consequence for storage, when it is built: an append-only sequence of
-observations per asset, keyed by asset and ordered by time. A transition is a
-view over that sequence, never a row in it. Building that store is out of scope
-here.
+The consequence for storage: an append-only sequence of observations per asset,
+keyed by asset and ordered by time. A transition is a view over that sequence,
+never a row in it. That store is specified in [history.md](history.md); it
+retains a bounded number of observations per asset and computes the transitions
+on request.
 
 ## Reviewed against `internal/mechanics/mechanics.go`
 
@@ -255,18 +257,20 @@ already-classified report from another.
 
 ## What this does not do
 
-- **No detection pipeline.** Nothing schedules scans, diffs a feed, or alerts.
-  The comparison functions are pure and someone has to call them with two
-  observations.
-- **No storage.** No history is written anywhere. Where observations come from,
-  and how they are retained, is not decided here beyond the observation-versus-
-  transition split above.
-- **No API or CLI surface.** The types carry JSON tags so a future endpoint or
-  command has a shape to render, but nothing exposes them yet.
+- **No detection pipeline here.** Nothing in this package schedules scans, diffs
+  a feed, or alerts. The comparison functions are pure and someone has to call
+  them with two observations.
+- **No storage here.** This package retains nothing. Where observations come
+  from and how they are retained is specified in [history.md](history.md), not
+  decided by this document.
+- **No API or CLI surface here.** The types carry JSON tags so the endpoint that
+  serves them has a shape to render; that endpoint is
+  [the history view](history.md), which is a separate component.
 
 ## Out of scope
 
-Do not implement detection here. Do not build storage here.
+Do not implement detection in this package. Storage and the endpoint that
+publishes these comparisons live in [history.md](history.md), not here.
 
 ## Tests
 

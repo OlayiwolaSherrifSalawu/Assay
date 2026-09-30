@@ -30,6 +30,7 @@ with provenance recorded in
 | `USDZ` (Zeam Money) | **legitimate, uses clawback** | The other critical case. A regulated stablecoin (FSCA-licensed issuer, reciprocal SEP-1) that legitimately uses `auth_clawback_enabled` — the only subject in the set that measures the model's central claim that legitimate clawback is handled fairly. |
 | `BERKSHIRE` (nasdaq.finance) | trap | Impersonation asset with clawback. Confiscation capability *and* confirmed-bad reputation. |
 | `DOGE` (darkpool.digital) | trap | Known scam carrying **no auth flags**. The case that justifies the second axis. |
+| `VELO` (no domain) | legitimate | An issuer account with no `home_domain` at all — the field is absent from the ledger record. Nothing was ever claimed, so accountability must be `unknown` rather than `unverified`, and severity must stay `clear` (#3). |
 
 ## Results
 
@@ -45,6 +46,7 @@ row on each test run, so the table cannot drift from the code without a red test
 | usdz-clawback-regulated | `USDZ` | high | **high** | false | verified | `auth_revocable`, `auth_clawback_enabled` |
 | berkshire-clawback-scam | `BERKSHIRE` | high | **critical** | true | unverified | `auth_revocable`, `auth_clawback_enabled`, `domain_unverified`, `blocklisted` |
 | doge-noflags-scam | `DOGE` | clear | **critical** | true | unverified | `domain_unverified`, `blocklisted` |
+| velo-no-home-domain | `VELO` | clear | **clear** | false | unknown | `domain_unverified` |
 
 ## What each result proves
 
@@ -121,6 +123,22 @@ is not a power over holders. It is reported as its own finding instead, and this
 subject is here so the unlocked branch is pinned by the eval rather than only by
 a unit test.
 
+### VELO — no claim, not a failed claim
+
+`clear`, not escalated, `accountability: unknown`.
+
+The issuer account carries no `home_domain` — Horizon omits the field
+entirely — so there is no published identity and no stellar.toml to read.
+That is a third state, distinct from both verification (`AQUA`) and a failed
+verification (`USDC`): nobody has made a claim, so nobody has failed one.
+Accountability records it as `unknown`, never `unverified`, because
+`unverified` would assert an attempt that never happened.
+
+It is also the proof that the distinction does not buy a severity discount in
+disguise: identical flags to `aqua-clear-verified`, identical `clear` result.
+The `domain_unverified` bit still appears, because no identity was published
+to verify against. This subject is the fixture for issue #3.
+
 ## Per-check evaluation
 
 An aggregate verdict can be right for the wrong reason: if the capability check
@@ -146,6 +164,7 @@ Measured per-check output (same fixtures as the table above):
 | usdz-clawback-regulated | high, `auth_revocable`, `auth_clawback_enabled` | clear | verified | clear (escalation axis) |
 | berkshire-clawback-scam | high, `auth_revocable`, `auth_clawback_enabled` | clear | unverified, `domain_unverified` | critical, `blocklisted` |
 | doge-noflags-scam | clear | clear | unverified, `domain_unverified` | critical, `blocklisted` |
+| velo-no-home-domain | clear | clear | unknown, `domain_unverified` | clear (escalation axis) |
 
 The `reputation` column carries the escalation axis: its finding is `clear` with
 `escalation: true` when nothing is flagged, and `critical` with `blocklisted`
@@ -179,8 +198,8 @@ movement fail the command.
 
 Stated plainly, because an eval that hides its gaps is marketing.
 
-- **Seven subjects.** Enough to pin the judgment boundaries, not enough for a
-  statistical claim. No precision/recall numbers are quoted, because seven
+- **Eight subjects.** Enough to pin the judgment boundaries, not enough for a
+  statistical claim. No precision/recall numbers are quoted, because eight
   subjects cannot support them.
 - **~~No legitimately-clawback-enabled asset~~ Closed 2026-09-27.**
   `USDZ-GAKTLPC4ZV37SSCITQ5IS5AQ4WPF4CF4VZJQPPAROSGXMYOATF5U6XPR` (Zeam Money)
@@ -203,7 +222,8 @@ Stated plainly, because an eval that hides its gaps is marketing.
 
 ## Adding a subject
 
-1. Capture fixtures for the asset and record provenance.
+1. Capture fixtures for the asset and record provenance, following
+   [Capturing a fixture](adding-a-check.md#capturing-a-fixture).
 2. Add a case to `TestEval` with the expected base, final, escalation, and
    accountability — and a `why` string stating what the case proves. The `why`
    is printed on failure, so a future maintainer learns what they broke.
@@ -238,8 +258,11 @@ Apache-2.0 and upstream payloads remain subject to their providers' terms.
 
 ### Point-in-time refresh pipeline
 
-1. Re-fetch every URL in the manifest and record one UTC capture date for the
-  refresh.
+1. Re-fetch the URLs recorded for a subject and record one UTC capture date for
+  the refresh. `make refresh-fixture SUBJECT=<dir>` does this from the URLs in
+  `PROVENANCE.md`, prints the diff for review, and updates the capture date in
+  both `PROVENANCE.md` and the manifest. A source that fails aborts before
+  anything is written, so a fixture is never left partial.
 2. Store only payloads whose current provider terms permit redistribution. For
   uncertain StellarExpert or issuer material, retain the URL and derived
   annotation rather than adding a new raw copy.

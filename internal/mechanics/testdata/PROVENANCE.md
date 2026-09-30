@@ -30,6 +30,9 @@ Each directory is one labelled subject for the eval in docs/eval.md.
 | `doge-noflags-scam/stellar.toml.status` | https://darkpool.digital/.well-known/stellar.toml (HTTP 000) |
 | `doge-noflags-scam/blocked.json` | https://api.stellar.expert/explorer/directory/blocked-domains/darkpool.digital |
 | `doge-noflags-scam/directory.json` | https://api.stellar.expert/explorer/directory/GA22IDJNHUMC3XKUCCBFNTQIJOUBWINC5GCXHLJ2V6KZ3OWAXCULNQ7P |
+| `velo-no-home-domain/asset.json` | https://horizon.stellar.org/assets?asset_code=VELO&asset_issuer=GDM4RQUQQUVSKQA7S6EM7XBZP3FCGH4Q7CL6TABQ7B2BEJ5ERARM2M5M (captured 2026-09-28) |
+| `velo-no-home-domain/account.json` | https://horizon.stellar.org/accounts/GDM4RQUQQUVSKQA7S6EM7XBZP3FCGH4Q7CL6TABQ7B2BEJ5ERARM2M5M (captured 2026-09-28) |
+| `velo-no-home-domain/directory.json` | https://api.stellar.expert/explorer/directory/GDM4RQUQQUVSKQA7S6EM7XBZP3FCGH4Q7CL6TABQ7B2BEJ5ERARM2M5M (captured 2026-09-28) |
 | `xrp-clear-unlocked/asset.json` | https://horizon.stellar.org/assets?asset_code=XRP&asset_issuer=GBXRPL45NPHCVMFFAYZVUVFFVKSIZ362ZXFP7I2ETNQ3QKZMFLPRDTD5 (captured 2026-09-25) |
 | `xrp-clear-unlocked/account.json` | https://horizon.stellar.org/accounts/GBXRPL45NPHCVMFFAYZVUVFFVKSIZ362ZXFP7I2ETNQ3QKZMFLPRDTD5 (captured 2026-09-25) |
 | `xrp-clear-unlocked/stellar.toml` | https://fchain.io/.well-known/stellar.toml (captured 2026-09-25) |
@@ -61,3 +64,17 @@ this fixture rests on:
 
 The asset is also attested on testnet — see `docs/deployment.md` — so this
 fixture closes the gap `docs/eval.md#coverage-gaps` flagged.
+
+### Why `velo-no-home-domain` has no toml and no blocked.json
+
+This is the subject issue #3 asks for: an issuer whose account carries no
+`home_domain` at all. Verified live on 2026-09-28 that Horizon **omits the
+field entirely** for this account rather than returning `""`, so
+`account.json` deliberately has no `home_domain` key — the empty-home-domain
+case, as the ledger actually serves it.
+
+With no advertised domain there is nothing to fetch: `internal/scan/scan.go`
+asks for neither the stellar.toml nor the blocked-domain lookup when
+`home_domain` is empty, so those two files correctly do not exist here. The
+directory entry is still captured, because the directory is queried by issuer
+address regardless.
