@@ -43,8 +43,9 @@ type Currency struct {
 	Issuer string `toml:"issuer"`
 	Name   string `toml:"name"`
 	Status string `toml:"status"`
-	// Toml is set when the entry is a link to another stellar.toml rather than
-	// an inline declaration.
+	// Toml is set when the entry links to another stellar.toml. SEP-0001 does
+	// not require such an entry to be link-only: it may also carry a code and
+	// issuer, and both fields are then meaningful.
 	Toml string `toml:"toml"`
 }
 
@@ -58,6 +59,17 @@ type Doc struct {
 	FetchedAt time.Time `toml:"-"`
 }
 
+// matches reports whether this entry declares the given asset inline.
+//
+// It is the single implementation of the matching rule so that "an entry that
+// matches" means exactly the same thing to Claims and to LinkedCurrencies:
+// code AND issuer, never code alone. If the two ever disagreed, an entry could
+// be counted as an unresolved link at the same time as it satisfies Claims,
+// and the domain check would hedge on an asset it had already verified.
+func (c Currency) matches(code, issuer string) bool {
+	return strings.EqualFold(c.Code, code) && strings.EqualFold(c.Issuer, issuer)
+}
+
 // Claims reports whether the document declares the given asset, matching on
 // both code and issuer. Matching on code alone would let any domain claim any
 // asset code, which is the exact failure this check exists to prevent.
@@ -66,7 +78,7 @@ func (d *Doc) Claims(code, issuer string) bool {
 		return false
 	}
 	for _, c := range d.Currencies {
-		if strings.EqualFold(c.Code, code) && strings.EqualFold(c.Issuer, issuer) {
+		if c.matches(code, issuer) {
 			return true
 		}
 	}
@@ -74,23 +86,36 @@ func (d *Doc) Claims(code, issuer string) bool {
 }
 
 // LinkedCurrencies counts entries that delegate to a separate per-currency
-// TOML file instead of declaring inline.
+// TOML file — entries carrying a `toml` link — and that do not themselves
+// already declare this asset inline.
 //
-// SEP-0001 allows a currency entry to carry
-// `toml="https://DOMAIN/.well-known/CURRENCY.toml"` as its ONLY field, so such
-// an entry has no code or issuer to match against. Assay does not follow those
-// links yet, which means a non-zero count here is the difference between "this
-// domain did not claim the asset" and "this domain may have claimed it in a
-// document we did not read". Those must never be reported the same way.
-func (d *Doc) LinkedCurrencies() int {
+// SEP-0001 lets a currency entry carry
+// `toml="https://DOMAIN/.well-known/CURRENCY.toml"`, and does not require that
+// link to be the entry's only field: one entry may carry the link alongside a
+// code and issuer. What matters here is not the shape of the entry but whether
+// the link is a claim Assay has not read: an entry that already matches inline
+// is a claim we did see and needs no hedge, while an entry that does not match
+// inline may be pointing at a document that does claim the asset. Because
+// Assay does not follow those links yet, a non-zero count is the difference
+// between "this domain did not claim the asset" and "this domain may have
+// claimed it in a document we did not read". Those must never be reported the
+// same way, so the count must not depend on the entry happening to also carry
+// a code.
+func (d *Doc) LinkedCurrencies(code, issuer string) int {
 	if d == nil {
 		return 0
 	}
 	n := 0
 	for _, c := range d.Currencies {
-		if c.Toml != "" && c.Code == "" && c.Issuer == "" {
-			n++
+		if c.Toml == "" {
+			continue
 		}
+		// Already claimed inline: the link cannot make this asset any more
+		// claimed than it already is, so it is not an unresolved delegation.
+		if c.matches(code, issuer) {
+			continue
+		}
+		n++
 	}
 	return n
 }

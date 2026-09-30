@@ -27,6 +27,8 @@ func TestScanRejectsBadInput(t *testing.T) {
 		{"empty asset", "/api/v1/scan?asset="},
 		{"not an asset", "/api/v1/scan?asset=hello"},
 		{"bad issuer", "/api/v1/scan?asset=USDC-NOPE"},
+		{"invalid max_age_secs", "/api/v1/scan?asset=USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN&max_age_secs=notanumber"},
+		{"negative max_age_secs", "/api/v1/scan?asset=USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN&max_age_secs=-10"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rec := httptest.NewRecorder()

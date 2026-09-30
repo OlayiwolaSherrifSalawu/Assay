@@ -154,6 +154,22 @@
         "https://api.stellar.expert/explorer/directory/blocked-domains/darkpool.digital",
         "https://api.stellar.expert/explorer/directory/GA22IDJNHUMC3XKUCCBFNTQIJOUBWINC5GCXHLJ2V6KZ3OWAXCULNQ7P"
       ]
+    },
+    {
+      "fixture": "velo-no-home-domain",
+      "asset": "VELO-GDM4RQUQQUVSKQA7S6EM7XBZP3FCGH4Q7CL6TABQ7B2BEJ5ERARM2M5M",
+      "label": "legitimate",
+      "base_severity": "clear",
+      "severity": "clear",
+      "escalated": false,
+      "accountability": "unknown",
+      "mechanics": ["domain_unverified"],
+      "capture_date": "2026-09-28",
+      "source_urls": [
+        "https://horizon.stellar.org/assets?asset_code=VELO&asset_issuer=GDM4RQUQQUVSKQA7S6EM7XBZP3FCGH4Q7CL6TABQ7B2BEJ5ERARM2M5M",
+        "https://horizon.stellar.org/accounts/GDM4RQUQQUVSKQA7S6EM7XBZP3FCGH4Q7CL6TABQ7B2BEJ5ERARM2M5M",
+        "https://api.stellar.expert/explorer/directory/GDM4RQUQQUVSKQA7S6EM7XBZP3FCGH4Q7CL6TABQ7B2BEJ5ERARM2M5M"
+      ]
     }
   ]
 }

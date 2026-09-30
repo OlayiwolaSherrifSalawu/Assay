@@ -65,6 +65,15 @@ These are the bugs that matter most, because someone acts on the output.
 - Missing checks. A mechanic Assay does not examine yet is a feature request —
   open an issue.
 
+## Attester key
+
+The testnet registry's entire write path is the single `assay-attester` key.
+Where it lives, how it is backed up, what an attacker holding it can and
+cannot do, and the response to loss or compromise are documented in
+[docs/attester-key.md](docs/attester-key.md). A suspected key compromise that
+produces under-reporting attestations counts as a critical report under the
+policy above — report it privately first.
+
 ## Supported versions
 
 Pre-1.0. Only `main` is supported; there are no maintained release branches.

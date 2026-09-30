@@ -2,6 +2,7 @@ package mechanics_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/use-assay/assay/internal/eval"
@@ -168,6 +169,53 @@ func TestAccountabilityNeverChangesSeverity(t *testing.T) {
 	if repV.Accountability == repA.Accountability {
 		t.Errorf("accountability should differ between the two subjects, both = %v",
 			repV.Accountability)
+	}
+}
+
+// TestNoHomeDomainIsUnknownNotUnverified is the distinction issue #3 asks for,
+// asserted against a real capture rather than a stripped copy: VELO's issuer
+// account carries no home_domain at all (Horizon omits the field entirely), so
+// nobody has claimed the asset. That is a different state from a domain that
+// was advertised and failed verification, and it must not move severity either
+// — aqua-clear-verified is the same flags with a claim on top.
+func TestNoHomeDomainIsUnknownNotUnverified(t *testing.T) {
+	eng := mechanics.NewEngine()
+
+	unclaimed, err := eng.Run(context.Background(), loadSubject(t, "velo-no-home-domain"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	claimed, err := eng.Run(context.Background(), loadSubject(t, "aqua-clear-verified"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if unclaimed.Accountability != mechanics.AccountabilityUnknown {
+		t.Errorf("accountability = %q, want %q: an issuer with no home_domain has made no "+
+			"claim, it has not failed one", unclaimed.Accountability, mechanics.AccountabilityUnknown)
+	}
+	if claimed.Accountability != mechanics.AccountabilityVerified {
+		t.Errorf("control subject accountability = %q, want %q",
+			claimed.Accountability, mechanics.AccountabilityVerified)
+	}
+	if unclaimed.Base != claimed.Base || unclaimed.Severity != claimed.Severity {
+		t.Errorf("identical flags classified differently: no home_domain = %v/%v, verified domain = %v/%v",
+			unclaimed.Base, unclaimed.Severity, claimed.Base, claimed.Severity)
+	}
+
+	var domain *mechanics.Finding
+	for i := range unclaimed.Findings {
+		if unclaimed.Findings[i].Check == "sep1-domain" {
+			domain = &unclaimed.Findings[i]
+		}
+	}
+	if domain == nil {
+		t.Fatal("report carries no sep1-domain finding")
+	}
+	for _, want := range []string{"Nobody has publicly claimed", "not a failed verification"} {
+		if !strings.Contains(domain.Reasoning, want) {
+			t.Errorf("reasoning must say %q: %s", want, domain.Reasoning)
+		}
 	}
 }
 

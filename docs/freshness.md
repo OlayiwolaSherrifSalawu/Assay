@@ -195,6 +195,18 @@ property of the *use*, not of the asset: the correct window for "should my
 vault accept a deposit right now" is different from "should this explorer show
 a green badge", and only the caller knows which question it is asking.
 
+## Off-chain freshness and report state
+
+Off-chain, `internal/mechanics.Report` represents freshness directly via its `state` and `stale` fields:
+
+| State (`state`) | `stale` | Meaning |
+| --- | --- | --- |
+| `valid` | `false` | A fresh, complete verdict within the policy window. |
+| `unknown` | `false` | A check could not conclude (`undetermined` or `unevaluated`). |
+| `stale` | `true` | The verdict was complete when made, but is older than the policy window. |
+
+The freshness evaluator (`internal/mechanics.FreshnessEvaluator`) checks a report against a policy window (defaulting to 24 hours). If stale, `attest.FromReport` refuses attestation (`ErrStale`), ensuring an expired verdict is never attested as fresh on-chain.
+
 ## Re-deriving these numbers
 
 Everything measured here is reproducible without trust in this document:
