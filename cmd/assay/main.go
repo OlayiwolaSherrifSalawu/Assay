@@ -22,6 +22,7 @@ import (
 	// HTTP endpoint, a different thing.
 	historystore "github.com/use-assay/assay/internal/history"
 	"github.com/use-assay/assay/internal/mechanics"
+	"github.com/use-assay/assay/internal/replay"
 	"github.com/use-assay/assay/internal/scan"
 )
 
@@ -131,6 +132,13 @@ Every command that scans accepts:
 Commands that scan also accept:
   -asset-lists URL[,URL...]       SEP-0042 Stellar Asset Lists to consume
                                   (repeatable). No list is used by default.
+
+The scan command additionally accepts:
+  -record DIR             save every upstream response into DIR with a
+                          manifest, for later -replay
+  -replay DIR             serve every upstream response from a recording;
+                          an unrecorded request fails loudly instead of
+                          reaching the network
 `)
 }
 
@@ -168,6 +176,10 @@ func runWith(args []string, d commandDeps) error {
 func runScan(args []string, d commandDeps) error {
 	fs := flag.NewFlagSet("scan", flag.ContinueOnError)
 	assetLists := assetListFlags(fs)
+	recordDir := fs.String("record", "",
+		"save every upstream response into DIR for later -replay")
+	replayDir := fs.String("replay", "",
+		"serve every upstream response from a recording made with -record")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -178,11 +190,22 @@ func runScan(args []string, d commandDeps) error {
 	if err != nil {
 		return err
 	}
+	if *recordDir != "" && *replayDir != "" {
+		return fmt.Errorf("-record and -replay are mutually exclusive")
+	}
+
+	scanFn, finish, err := scanFuncForRecording(assetLists(), d, *recordDir, *replayDir)
+	if err != nil {
+		return err
+	}
+	// A recording is closed even when the scan fails: a failed live scan is
+	// exactly the case worth reproducing, so everything it did fetch is kept.
+	defer finish()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	report, err := scanFuncFor(assetLists(), d)(ctx, asset)
+	report, err := scanFn(ctx, asset)
 	if err != nil {
 		return err
 	}
@@ -190,6 +213,56 @@ func runScan(args []string, d commandDeps) error {
 	enc := json.NewEncoder(d.stdout)
 	enc.SetIndent("", "  ")
 	return enc.Encode(report)
+}
+
+// scanFuncForRecording returns the scan function for the scanning subcommands
+// plus a finish hook that must run after the scan, whatever its outcome.
+//
+// With neither flag it returns the injected dependency unchanged, so dispatch
+// tests never construct a scanner or touch a transport. -record wraps the
+// fetchers' transport in a recorder; -replay replaces it with the recording.
+// Nothing else about the scan changes — same fetches, same engine — which is
+// what makes a replayed report comparable to the recorded one.
+func scanFuncForRecording(lists []string, d commandDeps, recordDir, replayDir string) (func(context.Context, mechanics.Asset) (*mechanics.Report, error), func(), error) {
+	if recordDir == "" && replayDir == "" {
+		return scanFuncFor(lists, d), func() {}, nil
+	}
+	scanner := newScanner(lists)
+
+	if recordDir != "" {
+		rec, err := replay.NewRecorder(recordDir, scanner.Horizon.HTTP.Transport)
+		if err != nil {
+			return nil, func() {}, err
+		}
+		wireTransport(scanner, rec)
+		return scanner.Scan, func() {
+			if err := rec.Close(); err != nil {
+				// The scan's report is already on stdout or already failed;
+				// the recording failing must not mask either, but it must be
+				// said out loud — a silently missing recording turns the
+				// next -replay into a confusing "unrecorded request".
+				fmt.Fprintln(d.stderr, "assay: recording not written:", err)
+			}
+		}, nil
+	}
+
+	rp, err := replay.NewReplayer(replayDir)
+	if err != nil {
+		return nil, func() {}, err
+	}
+	wireTransport(scanner, rp)
+	return scanner.Scan, func() {}, nil
+}
+
+// wireTransport points every fetcher's client at the same transport. The
+// fetchers build their http.Clients with the default transport and a timeout;
+// replacing the transport is the one seam every source shares.
+func wireTransport(s *scan.Scanner, rt http.RoundTripper) {
+	for _, c := range []*http.Client{
+		s.Horizon.HTTP, s.Toml.HTTP, s.Expert.HTTP, s.Lists.HTTP,
+	} {
+		c.Transport = rt
+	}
 }
 
 // scanFuncFor returns the scan function the scanning subcommands use. When no

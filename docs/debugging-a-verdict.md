@@ -177,6 +177,23 @@ Captured output:
 }
 ```
 
+### Capture the scan for replay (`-record` / `-replay`)
+
+Live sources change; the verdict that surprised you may be impossible to reproduce tomorrow. `./assay scan -record DIR CODE-ISSUER` saves every upstream response the scan fetches into `DIR` (with a `manifest.json` index), and `./assay scan -replay DIR CODE-ISSUER` re-runs the same scan from that recording — offline and deterministically, producing the identical report and preimage digest.
+
+```sh
+./assay scan -record /tmp/usdc-2026-09-28 USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
+# ...later, after the sources have changed:
+./assay scan -replay /tmp/usdc-2026-09-28 USDC-GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
+```
+
+Rules worth knowing before you rely on it:
+
+- **Recordings are verbatim, not cleaned up**: whatever the scan fetched is what got saved — 404s, redirects' final responses, and error pages included — because the evidence line cites the answer Assay actually read.
+- **Transport errors are not recorded**: an upstream outage during recording leaves that request absent, and a replay that needs it fails loudly (`unrecorded request … refusing to reach the network`) instead of reaching the network or serving an empty answer.
+- **Replay never touches the network**: the replayed transport holds no outbound connection at all. A request the scanner makes after the recording was made is an error, never a live fetch — so a recording is a faithful artifact to attach to a bug report, and a maintainer re-runs your exact scan offline.
+- **A recording is not a fixture**: it captures one scan, at one instant, for one subject. `internal/fixtures` remains the curated, reviewed corpus; recordings are the raw material a bug report arrives with.
+
 ---
 
 ## Step 2: Check the attributed evidence URLs against live sources
