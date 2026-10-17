@@ -41,7 +41,12 @@ type Server struct {
 	// at GET /metrics. Nil-safe: the handlers treat a nil Metrics as
 	// "nothing counted", never as a crash.
 	Metrics *Metrics
-	Log     *slog.Logger
+	// ExposureLimiter rate-limits GET /api/v1/exposure per client address.
+	// When nil, Handler installs a default bucket — nil means "apply the
+	// default", never "allow unlimited"; an exposure endpoint without a
+	// bound would be N scans per request with nothing between them.
+	ExposureLimiter *RateLimiter
+	Log             *slog.Logger
 }
 
 // NewServer returns a Server backed by the production scanner and an in-memory
@@ -60,6 +65,14 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/scan", s.handleScan)
 	mux.HandleFunc("GET /api/v1/history", s.handleHistory)
+	// Exposure is one request to many scans, so it is wrapped in the rate
+	// limit at registration — the bucket is built once per Handler, not per
+	// request, or every request would start with a full burst.
+	limiter := s.ExposureLimiter
+	if limiter == nil {
+		limiter = NewRateLimiter(defaultExposureBurst, defaultExposureRate)
+	}
+	mux.HandleFunc("GET /api/v1/exposure", s.withExposureLimit(limiter, s.handleExposure))
 	mux.HandleFunc("GET /metrics", s.handleMetrics)
 	// Liveness and readiness are separate endpoints on purpose: /healthz says
 	// the process is up and checks nothing, /readyz asks the upstreams. A

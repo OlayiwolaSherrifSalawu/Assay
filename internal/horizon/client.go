@@ -247,6 +247,32 @@ func (c *Client) Trustline(ctx context.Context, holder, code, issuer string) (*T
 	return nil, fmt.Errorf("%w: %s does not hold %s-%s", ErrNotFound, holder, code, issuer)
 }
 
+// Trustlines returns every credit trustline the account holds, in the order
+// Horizon lists them in the balances array.
+//
+// Native (XLM) balances carry no asset code or issuer: they have no issuer
+// that could exercise a clawback or authorization power, which is the
+// question an exposure listing answers, so they are not trustlines here.
+// The whole list is one /accounts/{id} call — the same request Trustline
+// makes for a single asset — so a page of exposure shares its fetch with
+// any single-asset scan of the same account.
+func (c *Client) Trustlines(ctx context.Context, holder string) ([]TrustlineBalance, error) {
+	var a struct {
+		Balances []TrustlineBalance `json:"balances"`
+	}
+	if err := c.get(ctx, "/accounts/"+url.PathEscape(holder), &a); err != nil {
+		return nil, err
+	}
+	tls := make([]TrustlineBalance, 0, len(a.Balances))
+	for _, b := range a.Balances {
+		if b.AssetCode == "" || b.AssetIssuer == "" {
+			continue
+		}
+		tls = append(tls, b)
+	}
+	return tls, nil
+}
+
 func (c *Client) get(ctx context.Context, path string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+path, nil)
 	if err != nil {
