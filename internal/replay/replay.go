@@ -118,7 +118,7 @@ func (r *Recorder) RoundTrip(req *http.Request) (*http.Response, error) {
 		return nil, err
 	}
 	body, err := io.ReadAll(resp.Body)
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if err != nil {
 		return nil, fmt.Errorf("replay: read response body for %s: %w", req.URL, err)
 	}

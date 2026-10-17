@@ -241,7 +241,7 @@ func scanFuncForRecording(lists []string, d commandDeps, recordDir, replayDir st
 				// the recording failing must not mask either, but it must be
 				// said out loud — a silently missing recording turns the
 				// next -replay into a confusing "unrecorded request".
-				fmt.Fprintln(d.stderr, "assay: recording not written:", err)
+				_, _ = fmt.Fprintln(d.stderr, "assay: recording not written:", err)
 			}
 		}, nil
 	}

@@ -58,18 +58,26 @@ func mustRequest(t *testing.T, url string) *http.Request {
 	return req
 }
 
-func do(t *testing.T, rt http.RoundTripper, url string) (*http.Response, string) {
+// doResult is what a caller may inspect once do() has consumed and closed
+// the response. The concrete *http.Response never leaves the helper, so no
+// caller can forget to close it.
+type doResult struct {
+	status int
+	header http.Header
+}
+
+func do(t *testing.T, rt http.RoundTripper, url string) (doResult, string) {
 	t.Helper()
 	resp, err := rt.RoundTrip(mustRequest(t, url))
 	if err != nil {
 		t.Fatalf("RoundTrip(%s): %v", url, err)
 	}
 	b, err := io.ReadAll(resp.Body)
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if err != nil {
 		t.Fatalf("read body: %v", err)
 	}
-	return resp, string(b)
+	return doResult{status: resp.StatusCode, header: resp.Header}, string(b)
 }
 
 const (
@@ -94,10 +102,10 @@ func TestRecordThenReplayServesIdenticalResponses(t *testing.T) {
 
 	// The caller must not be able to tell it is being recorded.
 	resp, body := do(t, rec, sourceURL)
-	if resp.StatusCode != 200 || body != sourceBody {
-		t.Fatalf("recorded response altered: status=%d body=%q", resp.StatusCode, body)
+	if resp.status != 200 || body != sourceBody {
+		t.Fatalf("recorded response altered: status=%d body=%q", resp.status, body)
 	}
-	if got := resp.Header.Get("Content-Type"); got != contentType {
+	if got := resp.header.Get("Content-Type"); got != contentType {
 		t.Errorf("Content-Type = %q, want %q", got, contentType)
 	}
 	if _, body := do(t, rec, otherURL); body != otherBody {
@@ -114,10 +122,10 @@ func TestRecordThenReplayServesIdenticalResponses(t *testing.T) {
 		t.Fatalf("NewReplayer: %v", err)
 	}
 	resp, body = do(t, rp, sourceURL)
-	if resp.StatusCode != 200 || body != sourceBody {
-		t.Errorf("replayed response differs: status=%d body=%q", resp.StatusCode, body)
+	if resp.status != 200 || body != sourceBody {
+		t.Errorf("replayed response differs: status=%d body=%q", resp.status, body)
 	}
-	if got := resp.Header.Get("Content-Type"); got != contentType {
+	if got := resp.header.Get("Content-Type"); got != contentType {
 		t.Errorf("replayed Content-Type = %q, want %q", got, contentType)
 	}
 	if _, body := do(t, rp, otherURL); body != otherBody {
@@ -149,7 +157,10 @@ func TestReplayUnrecordedRequestFailsLoudly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewReplayer: %v", err)
 	}
-	_, err = rp.RoundTrip(mustRequest(t, otherURL))
+	resp, err := rp.RoundTrip(mustRequest(t, otherURL))
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
 	if err == nil {
 		t.Fatal("unrecorded request was served; replay must fail loudly")
 	}
@@ -183,10 +194,16 @@ func TestReplayThroughHTTPClientNeverTouchesNetwork(t *testing.T) {
 	}
 
 	client := &http.Client{Transport: rp}
-	if _, err := client.Get(sourceURL); err != nil {
+	resp, err := client.Get(sourceURL)
+	if err != nil {
 		t.Fatalf("recorded request through http.Client: %v", err)
 	}
-	_, err = client.Get("https://example.invalid/not-recorded")
+	_, _ = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	resp, err = client.Get("https://example.invalid/not-recorded")
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
 	if err == nil || !strings.Contains(err.Error(), "unrecorded request") {
 		t.Fatalf("unrecorded request through http.Client: %v", err)
 	}
@@ -204,7 +221,11 @@ func TestRecorderDoesNotRecordTransportErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRecorder: %v", err)
 	}
-	if _, err := rec.RoundTrip(mustRequest(t, sourceURL)); err == nil {
+	resp, err := rec.RoundTrip(mustRequest(t, sourceURL))
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
+	if err == nil {
 		t.Fatal("RoundTrip should have failed")
 	}
 	if err := rec.Close(); err != nil {
@@ -315,7 +336,7 @@ func TestRecorderIsTransparentUnderHTTPServer(t *testing.T) {
 		t.Fatalf("GET: %v", err)
 	}
 	b, _ := io.ReadAll(resp.Body)
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if string(b) != sourceBody {
 		t.Fatalf("body through recorder = %q", b)
 	}
@@ -334,7 +355,7 @@ func TestRecorderIsTransparentUnderHTTPServer(t *testing.T) {
 		t.Fatalf("replayed GET with the server closed: %v", err)
 	}
 	b, _ = io.ReadAll(got.Body)
-	got.Body.Close()
+	_ = got.Body.Close()
 	if string(b) != sourceBody {
 		t.Errorf("replayed body = %q, want %q", b, sourceBody)
 	}
